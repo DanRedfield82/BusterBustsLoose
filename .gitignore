@@ -1,0 +1,39 @@
+# ROMs: never commit game data (users supply their own copy)
+*.sfc
+*.smc
+*.swc
+*.fig
+*.zip
+
+# builds and packaged output
+build*/
+dist/
+out/
+
+# save states, settings and captures (they hold game RAM/VRAM or are per user)
+*.sta
+*.state
+saves/
+screenshots/
+bbl.ini
+
+# SDL2: only the headers and the x64 libraries the build needs are kept
+third_party/SDL2-*/lib/x86/
+third_party/SDL2-*/lib/x64/*.pdb
+third_party/SDL2-*/lib/x64/SDL2test.lib
+third_party/SDL2-*/docs/
+third_party/SDL2-*/cmake/
+# (unused)
+third_party/font8x8/
+
+# local working files
+trailer_work/
+.claude/
+CLAUDE.md
+.vs/
+.vscode/
+*.user
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini

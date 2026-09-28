@@ -1,0 +1,9 @@
+* text=auto
+# the player readme ships with Windows line endings
+readme.txt text eol=crlf
+*.ps1 text eol=crlf
+*.rc text eol=crlf
+*.ico binary
+*.png binary
+*.dll binary
+*.lib binary
