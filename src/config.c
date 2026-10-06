@@ -62,6 +62,11 @@ void config_defaults(Settings* s) {
   s->windowScale = 3;
   s->widescreen = WS_16_9;
   s->lastWidescreen = WS_16_9;
+#ifdef __ANDROID__
+  // (a phone's screen is wider than 16:9: the picture fills it)
+  s->widescreen = WS_AUTO;
+  s->lastWidescreen = WS_AUTO;
+#endif
   s->hudReanchor = 1;
   s->aspect = ASPECT_CRT;
   s->scaling = SCALE_SHARP;
@@ -80,6 +85,7 @@ void config_defaults(Settings* s) {
   s->monoAudio = 0;
   s->muteWhenPaused = 1;
   s->pauseOnFocusLoss = 1;
+  s->touchControls = 1;   // (TOUCH_AUTO)
   s->fastForward = 1;
   s->saveSlot = 1;
   s->levelDifficulty = 1;
@@ -122,6 +128,7 @@ static int buildTable(IniInt* t) {
   I("analog_stick", cfg.analogStick);
   I("select_opens_menu", cfg.selectOpensMenu);
   I("fast_forward", cfg.fastForward);
+  I("touch_controls", cfg.touchControls);
   I("save_slot", cfg.saveSlot);
   I("level_difficulty", cfg.levelDifficulty);
   I("skip_intro", cfg.skipIntro);
@@ -209,6 +216,7 @@ void config_validate(void) {
   clampInt(&cfg.analogStick, 0, 1, d.analogStick);
   clampInt(&cfg.selectOpensMenu, 0, 1, d.selectOpensMenu);
   clampInt(&cfg.fastForward, 0, 1, d.fastForward);
+  clampInt(&cfg.touchControls, 0, 2, d.touchControls);
   clampInt(&cfg.saveSlot, 1, 9, d.saveSlot);
   clampInt(&cfg.levelDifficulty, 0, 2, d.levelDifficulty);
   clampInt(&cfg.skipIntro, 0, 1, d.skipIntro);

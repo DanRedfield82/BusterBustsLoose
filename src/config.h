@@ -56,6 +56,7 @@ typedef struct Settings {
   int analogStick;                // left stick drives the d-pad
   int selectOpensMenu;            // SNES Select opens the menu instead of reaching the game
   int fastForward;                // the fast forward button works
+  int touchControls;              // TOUCH_OFF / TOUCH_AUTO / TOUCH_ALWAYS (touch.h)
   // misc
   char romPath[512];
   int saveSlot;

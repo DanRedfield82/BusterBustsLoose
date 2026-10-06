@@ -148,6 +148,26 @@ cmake --build build --config Release
 
 Or run `package.ps1`, which builds and copies everything into `dist\BusterBustsLoose`.
 
+### Android
+
+The same code builds for Android (`android/`), with SDL2 compiled from source. You need
+the Android SDK with NDK 28.2 and CMake 3.31.6 (both from the SDK manager) and JDK 17–21
+for Gradle.
+
+```
+powershell android\fetch_sdl.ps1
+cd android
+gradlew assembleDebug
+```
+
+The APK ends up in `android/app/build/outputs/apk/`. On a phone:
+- The ROM is picked once with Android's file picker and copied into the app's storage.
+- Settings and saves live in app storage too.
+- The picture fills the screen (widescreen "Fit window").
+- On-screen touch controls appear (Controls > Touch controls). A Bluetooth or USB
+  controller works too, and hides them.
+- Back opens the menu.
+
 ### Source layout
 
 | Path | Contents |

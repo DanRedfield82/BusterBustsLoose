@@ -67,6 +67,11 @@ static int sfxId = 1;
 static const char* confirmText;
 static void (*confirmAction)(void);
 
+// where the last drawn rows are, for touch (menu_tap)
+typedef struct HitRow { int y0, y1, sel, type; bool twoCols; } HitRow;
+static HitRow hits[MAX_ROWS];
+static int hitCount, hitX0, hitX1, hitValueX, lastRowH = 12;
+
 static void pageMain(void);
 
 // ---------------------------------------------------------------- widgets
@@ -185,6 +190,10 @@ static void pageVideo(void) {
   static const char* const limitNames[] = { "Original", "Unlimited" };
   title("VIDEO");
   header("Display");
+#ifdef __ANDROID__
+  // (a phone shows the game on the whole screen: no window, monitor or size)
+  (void)displayNames;
+#else
   if(choice("Display mode", &cfg.displayMode, displayNames, DISPLAY_COUNT, "Windowed, borderless fullscreen or exclusive fullscreen (F11)")) app_applyVideo();
   {
     static char monNames[8][96];
@@ -197,6 +206,7 @@ static void pageVideo(void) {
     if(choice("Monitor", &cfg.monitor, monPtrs, n, "Which display the game uses")) app_applyVideo();
   }
   if(slider("Window size", &cfg.windowScale, 1, 8, 1, "%dx", "Window size as a multiple of the SNES resolution")) app_applyVideo();
+#endif
   if(toggle("V-Sync", &cfg.vsync, "Sync to the monitor refresh; turn off if you see stutter on high refresh displays")) app_applyVideo();
   header("Widescreen");
   if(choice("Widescreen", &cfg.widescreen, wsNames, WS_COUNT, "Show more of the level to the sides during gameplay (F10)")) app_applyGameSettings();
@@ -370,6 +380,9 @@ static void pageControls(void) {
   toggle("Select opens menu", &cfg.selectOpensMenu,
     "Use the Select button (Back/View/Share/Minus) as the menu button; the game only uses it as a second Start");
   toggle("Fast forward", &cfg.fastForward, "Holding the fast forward button (Tab / right trigger) speeds the game up");
+  static const char* const touchNames[] = { "Off", "Auto", "Always" };
+  choice("Touch controls", &cfg.touchControls, touchNames, 3,
+    "On-screen buttons for touch screens; Auto shows them once the screen is touched and hides them when a controller is used");
   submenu("Keyboard", pageKeyboard, "Change keyboard keys");
   submenu("Gamepad", pageGamepad, "Change controller buttons (XInput, DualShock, Switch Pro and more)");
 }
@@ -552,6 +565,23 @@ static void runPage(int nav) {
   }
 }
 
+void menu_tap(int x, int y) {
+  if(!open || captureTarget >= 0 || confirmText) return;   // (a dialog takes OK / BACK)
+  if(x < hitX0 || x >= hitX1) return;
+  for(int i = 0; i < hitCount; i++) {
+    const HitRow* h = &hits[i];
+    if(y < h->y0 || y >= h->y1) continue;
+    cursor[depth] = h->sel;
+    if(h->twoCols) return;   // (key and button bindings are set with a keyboard or pad)
+    int nav = NAV_OK;
+    if(h->type == ROW_VALUE) nav = x >= hitValueX && x < hitValueX + (hitX1 - hitValueX) / 2 ? NAV_LEFT : NAV_RIGHT;
+    in_injectNav(nav);
+    return;
+  }
+}
+
+int menu_rowHeight(void) { return lastRowH; }
+
 void menu_update(void) {
   if(!open) return;
   if(captureTarget >= 0) {
@@ -613,7 +643,11 @@ static UiColor rowColour(UiColor c, bool active) {
 
 void menu_draw(int winW, int winH) {
   if(!open) return;
+#ifdef __ANDROID__
+  int s = winH / 200;   // (bigger rows for fingers)
+#else
   int s = winH / 270;
+#endif
   if(winW / 420 < s) s = winW / 420;
   if(s < 1) s = 1;
   int ch = 8 * s;
@@ -654,12 +688,18 @@ void menu_draw(int winW, int winH) {
 
   const char* help = NULL;
   sel = 0;
+  hitCount = 0;
+  hitX0 = px + ch;
+  hitX1 = px + panelW - ch;
+  hitValueX = px + panelW / 2;
+  lastRowH = rowH;
   for(int i = 0; i < rowCount; i++) {
     Row* r = &rows[i];
     int mySel = r->selectable ? sel++ : -1;
     if(i < top || i >= top + visible) continue;
     int y = listTop + (i - top) * rowH;
     bool active = r->selectable && mySel == cursor[depth];
+    if(r->selectable && hitCount < MAX_ROWS) hits[hitCount++] = (HitRow){ y - s * 2, y - s * 2 + rowH, mySel, r->type, r->value2[0] != 0 };
     if(active) {
       ui_rect(px + ch, y - s * 2, panelW - 2 * ch, rowH, C_BAR);
       ui_rect(px + ch, y - s * 2, bt * 2, rowH, C_BORDER);   // accent at the left of the bar

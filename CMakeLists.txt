@@ -52,6 +52,7 @@ add_executable(BusterBustsLoose WIN32
   src/finput.c
   src/ui.c
   src/bgtask.c
+  src/touch.c
   src/app.rc
 )
 target_include_directories(BusterBustsLoose PRIVATE ${SDL2_INCLUDE})

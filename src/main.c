@@ -30,6 +30,11 @@
 #include "bgtask.h"
 #include "music.h"
 #include "levels.h"
+#include "touch.h"
+#ifdef __ANDROID__
+#include <unistd.h>
+#include <jni.h>
+#endif
 
 #define APP_TITLE "Buster Busts Loose!"
 
@@ -168,6 +173,9 @@ static int targetDisplay(void) {
 }
 
 static void resizeWindowToScale(void) {
+#ifdef __ANDROID__
+  return;   // (the window is the whole screen)
+#endif
   if(cfg.displayMode != DISPLAY_WINDOWED) return;
   int pw, ph;
   pictureSize(&pw, &ph);
@@ -185,6 +193,11 @@ static void resizeWindowToScale(void) {
 }
 
 void app_applyVideo(void) {
+#ifdef __ANDROID__
+  // (always the whole screen: only V-Sync applies)
+  SDL_RenderSetVSync(app.ren, cfg.vsync ? 1 : 0);
+  return;
+#endif
   int disp = targetDisplay();
   // leave fullscreen first so the window can move to the chosen monitor
   if(SDL_GetWindowFlags(app.win) & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(app.win, 0);
@@ -548,6 +561,7 @@ static void renderFrame(void) {
     ui_textShadow((W - ui_textWidth(t, s * 2)) / 2, H / 2 - 8 * s, t, UI_WHITE, s * 2);
   }
   menu_draw(W, H);
+  touch_render(app.ren, W, H);
   if(SDL_GetTicks() < app.toastUntil) {
     int tw = ui_textWidth(app.toast, s) + 16 * s;
     ui_frame(W - tw - 8 * s, 8 * s, tw, 14 * s, (UiColor){ 14, 26, 48, 232 }, (UiColor){ 76, 134, 200, 255 }, s > 1 ? s * 3 / 4 : 1);
@@ -706,6 +720,38 @@ static bool askForRom(char* out, int size) {
 #endif
 }
 
+#ifdef __ANDROID__
+// Opens Android's file picker (BBLActivity.pickRom, Java) and waits for the
+// result: the chosen file copied into app storage. False if cancelled.
+static bool androidPickRom(char* out, int size) {
+  JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  if(!env || !act) return false;
+  jclass cls = (*env)->GetObjectClass(env, act);
+  jmethodID pick = (*env)->GetStaticMethodID(env, cls, "pickRom", "()V");
+  jmethodID poll = (*env)->GetStaticMethodID(env, cls, "pollRomResult", "()Ljava/lang/String;");
+  bool ok = false;
+  if(pick && poll) {
+    (*env)->CallStaticVoidMethod(env, cls, pick);
+    for(;;) {
+      SDL_PumpEvents();
+      SDL_Delay(50);
+      jstring s = (jstring)(*env)->CallStaticObjectMethod(env, cls, poll);
+      if(!s) continue;   // (still choosing)
+      const char* p = (*env)->GetStringUTFChars(env, s, NULL);
+      snprintf(out, size, "%s", p ? p : "");
+      ok = p && p[0];
+      if(p) (*env)->ReleaseStringUTFChars(env, s, p);
+      (*env)->DeleteLocalRef(env, s);
+      break;
+    }
+  }
+  (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  return ok;
+}
+#endif
+
 static Bbl* findRom(int argc, char** argv) {
   char err[512] = {0};
   Bbl* g = NULL;
@@ -714,6 +760,35 @@ static Bbl* findRom(int argc, char** argv) {
     if(argv[i][0] != '-') g = tryRom(argv[i], err, sizeof(err));
   }
   if(!g && cfg.romPath[0]) g = tryRom(cfg.romPath, err, sizeof(err));
+#ifdef __ANDROID__
+  // the ROM picked once with Android's file picker, copied into app storage
+  // (BBLActivity.pickRom); asked for again until a usable one is chosen
+  char kept[1100];
+  snprintf(kept, sizeof(kept), "%srom.sfc", app.dataDir);
+  if(!g) g = tryRom(kept, err, sizeof(err));
+  while(!g) {
+    char msg[1024];
+    if(romRejected[0]) snprintf(msg, sizeof(msg), "That file can't be used.\n\n%s\n\nPlease choose the USA version.", romRejected);
+    else snprintf(msg, sizeof(msg), "This port needs the original game ROM to run:\n\n"
+      "Tiny Toon Adventures - Buster Busts Loose! (USA)\n\n"
+      "Choose the .sfc file on the next screen. It is copied into the app, so you only do this once.");
+    const SDL_MessageBoxButtonData buttons[] = {
+      { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Choose ROM" },
+      { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Quit" },
+    };
+    const SDL_MessageBoxData box = { SDL_MESSAGEBOX_INFORMATION, NULL, APP_TITLE, msg, 2, buttons, NULL };
+    int choice = 0;
+    if(SDL_ShowMessageBox(&box, &choice) != 0 || choice != 1) return NULL;
+    char path[1024];
+    if(!androidPickRom(path, sizeof(path))) continue;   // (cancelled: ask again)
+    romRejected[0] = 0;
+    g = tryRom(path, err, sizeof(err));
+    if(!g) {
+      if(!romRejected[0]) snprintf(romRejected, sizeof(romRejected), "%s", err);
+      remove(path);
+    }
+  }
+#else
   if(!g) g = searchDir(app.baseDir);
   if(!g) {
     char cwd[1024];
@@ -731,6 +806,7 @@ static Bbl* findRom(int argc, char** argv) {
       strcat(up, "..\\");
     }
   }
+#endif
   if(!g && romRejected[0]) {
     char msg[1024];
     snprintf(msg, sizeof(msg), "A ROM was found but it isn't the right version.\n\n%s\n\n"
@@ -868,10 +944,14 @@ static void scriptStep(void) {
       continue;
     }
     if(!strcmp(cmd, "mem")) {
+#ifdef _WIN32
       PROCESS_MEMORY_COUNTERS pmc;
       if(GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
         fprintf(stderr, "mem working=%u KB private=%u KB fps=%.1f loops=%.1f\n", (unsigned)(pmc.WorkingSetSize / 1024),
                 (unsigned)(pmc.PagefileUsage / 1024), app.fps, app.loopsPerSec);
+#else
+      fprintf(stderr, "mem fps=%.1f loops=%.1f\n", app.fps, app.loopsPerSec);
+#endif
       continue;
     }
     if(!strcmp(cmd, "display")) { cfg.displayMode = atoi(a1); app_applyVideo(); scriptWait = 30; return; }
@@ -998,13 +1078,24 @@ int main(int argc, char** argv) {
   SetProcessDPIAware();
 #endif
   SDL_SetHint(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
+#ifdef __ANDROID__
+  SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+  SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");   // (Back opens the menu)
+  SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
   if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER | SDL_INIT_TIMER) != 0) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, APP_TITLE, SDL_GetError(), NULL);
     return 1;
   }
+#ifdef __ANDROID__
+  // settings, saves and the ROM live in the app's own storage
+  const char* internal = SDL_AndroidGetInternalStoragePath();
+  snprintf(app.baseDir, sizeof(app.baseDir), "%s/", internal ? internal : ".");
+#else
   char* base = SDL_GetBasePath();
   snprintf(app.baseDir, sizeof(app.baseDir), "%s", base ? base : ".\\");
   SDL_free(base);
+#endif
   if(dirWritable(app.baseDir)) {
     snprintf(app.dataDir, sizeof(app.dataDir), "%s", app.baseDir);
   } else {
@@ -1032,8 +1123,12 @@ int main(int argc, char** argv) {
   int pw, ph;
   pictureSize(&pw, &ph);
   int startDisp = targetDisplay();
+#ifdef __ANDROID__
+  app.win = SDL_CreateWindow(APP_TITLE, 0, 0, 0, 0, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_ALLOW_HIGHDPI);
+#else
   app.win = SDL_CreateWindow(APP_TITLE, SDL_WINDOWPOS_CENTERED_DISPLAY(startDisp), SDL_WINDOWPOS_CENTERED_DISPLAY(startDisp),
     pw * cfg.windowScale, ph * cfg.windowScale, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+#endif
   if(!app.win) {
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, APP_TITLE, SDL_GetError(), NULL);
     return 1;
@@ -1042,7 +1137,9 @@ int main(int argc, char** argv) {
   // Direct3D 11 copes with fullscreen switches and alt-tab; SDL's default
   // Direct3D 9 renderer crashes when an exclusive fullscreen window is restored
   Uint32 renFlags = SDL_RENDERER_ACCELERATED | (cfg.vsync ? SDL_RENDERER_PRESENTVSYNC : 0);
+#ifdef _WIN32
   SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11");
+#endif
   app.ren = SDL_CreateRenderer(app.win, -1, renFlags);
   if(!app.ren) {
     SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
@@ -1059,7 +1156,11 @@ int main(int argc, char** argv) {
   app.running = true;
   app.lastCounter = SDL_GetPerformanceCounter();
   app.fpsTicks = SDL_GetTicks();
+#ifdef __ANDROID__
+  app_toast("Tap MENU or press Back for the menu");
+#else
   app_toast(cfg.selectOpensMenu ? "Esc or Select opens the menu" : "Esc or Select+Start opens the menu");
+#endif
   const double frameTime = 1.0 / SNES_FPS;
 
   while(app.running) {
@@ -1078,6 +1179,9 @@ int main(int argc, char** argv) {
           if(e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED && cfg.widescreen == WS_AUTO) app_applyGameSettings();
           break;
         case SDL_DROPFILE: SDL_free(e.drop.file); break;
+        // (Android: the app going to the background; it may be closed there)
+        case SDL_APP_WILLENTERBACKGROUND: app_saveConfig(); app.focusLost = true; break;
+        case SDL_APP_DIDENTERFOREGROUND: app.focusLost = false; app.lastCounter = SDL_GetPerformanceCounter(); break;
         default: break;
       }
       in_handleEvent(&e);
@@ -1085,8 +1189,15 @@ int main(int argc, char** argv) {
     in_setMenuActive(menu_isOpen());
     in_update();
     handleActions();
-    if(menu_isOpen()) menu_update();
-    else in_clearNav();
+    if(menu_isOpen()) {
+      // (touch: tapping a row, dragging the list)
+      int tx, ty;
+      if(touch_takeTap(&tx, &ty)) menu_tap(tx, ty);
+      for(int sc = touch_takeScroll(menu_rowHeight()); sc != 0; sc += sc > 0 ? -1 : 1) in_injectNav(sc > 0 ? NAV_DOWN : NAV_UP);
+      menu_update();
+    } else {
+      in_clearNav();
+    }
 
     // timing: run as many emulated frames as real time asks for
     uint64_t now = SDL_GetPerformanceCounter();

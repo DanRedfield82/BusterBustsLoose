@@ -7,3 +7,5 @@ readme.txt text eol=crlf
 *.png binary
 *.dll binary
 *.lib binary
+gradlew text eol=lf
+*.jar binary

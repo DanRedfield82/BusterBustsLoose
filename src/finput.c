@@ -2,6 +2,7 @@
 #include <string.h>
 #include "finput.h"
 #include "config.h"
+#include "touch.h"
 
 #define MAX_PADS 8
 #define STICK_DEADZONE 12000
@@ -22,6 +23,10 @@ static int navHead, navTail;
 static int navHeldDir;
 static uint32_t navNextRepeat;
 static int stickNavDir;
+
+// Android's Back button / gesture opens the menu (and steps back inside it)
+static bool backMenuPending;
+static bool menuActive;
 
 static int captureKind = CAPTURE_NONE;
 static bool captureHasResult;
@@ -75,11 +80,17 @@ static void closePad(SDL_JoystickID id) {
 }
 
 void in_handleEvent(const SDL_Event* e) {
+  touch_handleEvent(e);
   switch(e->type) {
     case SDL_CONTROLLERDEVICEADDED: openPad(e->cdevice.which); break;
     case SDL_CONTROLLERDEVICEREMOVED: closePad(e->cdevice.which); break;
     case SDL_KEYDOWN: {
       int sc = e->key.keysym.scancode;
+      if(sc == SDL_SCANCODE_AC_BACK) {
+        if(!e->key.repeat) { if(menuActive) navPush(NAV_BACK); else backMenuPending = true; }
+        return;
+      }
+      touch_noteOtherInput();
       if(sc > 0 && sc < SDL_NUM_SCANCODES) keyDown[sc] = true;
       if(captureKind == CAPTURE_KEY && !e->key.repeat) {
         captureResult = (sc == SDL_SCANCODE_ESCAPE) ? -1 : sc;
@@ -115,6 +126,7 @@ void in_handleEvent(const SDL_Event* e) {
       break;
     }
     case SDL_CONTROLLERBUTTONDOWN: {
+      touch_noteOtherInput();
       if(captureKind == CAPTURE_PAD) {
         captureResult = e->cbutton.button;
         captureHasResult = true;
@@ -202,8 +214,6 @@ static int stickMenuDir(void) {
   return stickNavDir;
 }
 
-static bool menuActive;
-
 void in_setMenuActive(bool active) { menuActive = active; }
 
 // keys that already have a meaning while the menu is open
@@ -251,6 +261,7 @@ uint16_t in_snesMask(void) {
     if(l) m |= 1 << BTN_LEFT;
     if(r) m |= 1 << BTN_RIGHT;
   }
+  m |= touch_snesMask();
   // a real pad cannot press opposite directions at once
   if((m & (1 << BTN_LEFT)) && (m & (1 << BTN_RIGHT))) m &= ~((1 << BTN_LEFT) | (1 << BTN_RIGHT));
   if((m & (1 << BTN_UP)) && (m & (1 << BTN_DOWN))) m &= ~((1 << BTN_UP) | (1 << BTN_DOWN));
@@ -258,6 +269,7 @@ uint16_t in_snesMask(void) {
 }
 
 void in_update(void) {
+  touch_frame();
   memcpy(actionPrev, actionNow, sizeof(actionNow));
   for(int a = 0; a < ACT_COUNT; a++) {
     int sc = cfg.keyAction[a];
@@ -265,6 +277,10 @@ void in_update(void) {
     if(padBindHeld(cfg.padAction[a])) held = true;
     actionNow[a] = held;
   }
+  if(touch_menuHeld() || backMenuPending) actionNow[ACT_MENU] = true;
+  backMenuPending = false;
+  if(touch_fastForwardHeld()) actionNow[ACT_FAST_FORWARD] = true;
+  touch_setMenuOpen(menuActive);
   if(cfg.selectOpensMenu) {
     if(selectMenuHeld()) actionNow[ACT_MENU] = true;
   } else if(padBindHeld(SDL_CONTROLLER_BUTTON_BACK) && padBindHeld(SDL_CONTROLLER_BUTTON_START)) {
@@ -283,6 +299,9 @@ void in_update(void) {
   else if(padBindHeld(SDL_CONTROLLER_BUTTON_DPAD_LEFT)) dir = NAV_LEFT;
   else if(padBindHeld(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) dir = NAV_RIGHT;
   else dir = stickMenuDir();
+  if(dir == 0 && menuActive) dir = touch_navDir();
+  // (the touch BACK button)
+  if(touch_takeBack() && menuActive && captureKind == CAPTURE_NONE) navPush(NAV_BACK);
   if(captureKind != CAPTURE_NONE) dir = 0;
   uint32_t now = SDL_GetTicks();
   if(dir == 0) {

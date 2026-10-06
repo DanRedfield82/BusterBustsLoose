@@ -37,3 +37,16 @@ __pycache__/
 *.pyc
 Thumbs.db
 desktop.ini
+
+# SDL2 source for the Android build (fetched by android/fetch_sdl.ps1)
+third_party/SDL2-*-src/
+# Android build output and local SDK path
+android/.gradle/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/build/
+*.apk
+*.keystore
+*.jks
+android/build_log.txt

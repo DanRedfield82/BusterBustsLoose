@@ -9,3 +9,7 @@ bool menu_isOpen(void);
 bool menu_musicActive(void);
 void menu_update(void);
 void menu_draw(int winW, int winH);
+// touch: a tap at a screen position selects the row there and activates it
+// (the left / right half of a value steps it back / forward)
+void menu_tap(int x, int y);
+int menu_rowHeight(void);   // of the last drawn menu, in screen pixels
