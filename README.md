@@ -22,6 +22,15 @@ line or drag a ROM onto the exe. Any other file is rejected with a message namin
 is, read from the ROM's internal header: the European (PAL) or Japanese version, a modified
 USA ROM (hack or bad dump), or not a SNES game at all.
 
+**On Android** (64-bit phones and tablets, Android 5.0 or later):
+1. Download the APK from the Releases page and open it on your phone. Android asks you to
+   allow installing apps from your browser or file manager the first time.
+2. Copy your ROM to the phone.
+3. Start the app and tap **Choose ROM**. It's copied into the app, so you only do this once.
+
+Touch controls appear on screen. A Bluetooth or USB controller works too, and hides them.
+Tap **MENU** or use the Back gesture for the menu.
+
 Press **Esc** or **Select** (keyboard: Right Shift; gamepad: Back / View / Share / Minus)
 to open the menu. The game only uses Select as a second Start button, so the port takes
 it over; you can turn that off under Controls, and Select + Start then opens the menu instead.

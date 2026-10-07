@@ -50,3 +50,4 @@ android/build/
 *.keystore
 *.jks
 android/build_log.txt
+android/keystore.properties

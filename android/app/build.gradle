@@ -2,6 +2,11 @@ plugins {
     id 'com.android.application'
 }
 
+// release signing: android/keystore.properties + release.jks (kept out of git)
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+
 android {
     namespace 'com.darhkfox.busterbustsloose'
     compileSdk 34
@@ -33,9 +38,21 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystoreFile.exists()) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            if (keystoreFile.exists()) signingConfig signingConfigs.release
         }
     }
 
