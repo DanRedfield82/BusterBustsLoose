@@ -379,10 +379,15 @@ static void pageControls(void) {
   title("CONTROLS");
   toggle("Select opens menu", &cfg.selectOpensMenu,
     "Use the Select button (Back/View/Share/Minus) as the menu button; the game only uses it as a second Start");
+#ifdef __ANDROID__
+  toggle("Fast forward", &cfg.fastForward, "Shows a FAST button at the top of the screen; holding it speeds the game up");
+#else
   toggle("Fast forward", &cfg.fastForward, "Holding the fast forward button (Tab / right trigger) speeds the game up");
+#endif
   static const char* const touchNames[] = { "Off", "Auto", "Always" };
   choice("Touch controls", &cfg.touchControls, touchNames, 3,
     "On-screen buttons for touch screens; Auto shows them once the screen is touched and hides them when a controller is used");
+  slider("Touch opacity", &cfg.touchOpacity, 10, 100, 10, "%d%%", "How solid the on-screen buttons look");
   submenu("Keyboard", pageKeyboard, "Change keyboard keys");
   submenu("Gamepad", pageGamepad, "Change controller buttons (XInput, DualShock, Switch Pro and more)");
 }

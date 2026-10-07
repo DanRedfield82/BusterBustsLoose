@@ -57,6 +57,7 @@ typedef struct Settings {
   int selectOpensMenu;            // SNES Select opens the menu instead of reaching the game
   int fastForward;                // the fast forward button works
   int touchControls;              // TOUCH_OFF / TOUCH_AUTO / TOUCH_ALWAYS (touch.h)
+  int touchOpacity;               // percent
   // misc
   char romPath[512];
   int saveSlot;

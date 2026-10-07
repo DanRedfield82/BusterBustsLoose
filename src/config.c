@@ -86,7 +86,11 @@ void config_defaults(Settings* s) {
   s->muteWhenPaused = 1;
   s->pauseOnFocusLoss = 1;
   s->touchControls = 1;   // (TOUCH_AUTO)
+  s->touchOpacity = 100;
   s->fastForward = 1;
+#ifdef __ANDROID__
+  s->fastForward = 0;     // (its button would sit over the picture)
+#endif
   s->saveSlot = 1;
   s->levelDifficulty = 1;
   s->skipIntro = 1;
@@ -129,6 +133,7 @@ static int buildTable(IniInt* t) {
   I("select_opens_menu", cfg.selectOpensMenu);
   I("fast_forward", cfg.fastForward);
   I("touch_controls", cfg.touchControls);
+  I("touch_opacity", cfg.touchOpacity);
   I("save_slot", cfg.saveSlot);
   I("level_difficulty", cfg.levelDifficulty);
   I("skip_intro", cfg.skipIntro);
@@ -217,6 +222,7 @@ void config_validate(void) {
   clampInt(&cfg.selectOpensMenu, 0, 1, d.selectOpensMenu);
   clampInt(&cfg.fastForward, 0, 1, d.fastForward);
   clampInt(&cfg.touchControls, 0, 2, d.touchControls);
+  clampInt(&cfg.touchOpacity, 10, 100, d.touchOpacity);
   clampInt(&cfg.saveSlot, 1, 9, d.saveSlot);
   clampInt(&cfg.levelDifficulty, 0, 2, d.levelDifficulty);
   clampInt(&cfg.skipIntro, 0, 1, d.skipIntro);

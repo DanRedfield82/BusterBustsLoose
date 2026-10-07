@@ -94,7 +94,9 @@ static int faceAt(float x, float y) {
 
 // the pills shown: in the menu only MENU and BACK (its rows are tapped directly)
 static bool pillShown(int i) {
-  return menuOpen ? (i == PILL_MENU || i == PILL_BACK) : i != PILL_BACK;
+  if(menuOpen) return i == PILL_MENU || i == PILL_BACK;
+  if(i == PILL_FF) return cfg.fastForward != 0;   // (Controls > Fast forward)
+  return i != PILL_BACK;
 }
 
 // what a new touch lands on
@@ -139,7 +141,7 @@ void touch_handleEvent(const SDL_Event* e) {
     f->x = x;
     f->y = y;
     if(menuOpen && f->owner == OWN_NONE) {
-      scrollAcc += f->lastY - y;   // (dragging up moves down the list)
+      scrollAcc += y - f->lastY;   // (the selection follows the finger)
       f->lastY = y;
       if(hypotf(x - f->startX, y - f->startY) > 0.03f * unit()) f->moved = true;
       if(e->type == SDL_FINGERUP && !f->moved) { tapPending = true; tapX = (int)x; tapY = (int)y; }
@@ -287,8 +289,12 @@ static void label(float cx, float cy, const char* s, int scale, UiColor c) {
   ui_text((int)(cx - ui_textWidth(s, scale) / 2.0f), (int)(cy - 3.5f * scale), s, c, scale);
 }
 
-static SDL_Color fillCol(bool pressed) { return pressed ? (SDL_Color){ 255, 255, 255, 110 } : (SDL_Color){ 20, 30, 60, 90 }; }
-static const SDL_Color edgeCol = { 255, 255, 255, 150 };
+// (Controls > Touch opacity scales every part of the overlay)
+static uint8_t alpha(int a) { return (uint8_t)(a * cfg.touchOpacity / 100); }
+static SDL_Color fillCol(bool pressed) {
+  return pressed ? (SDL_Color){ 255, 255, 255, alpha(110) } : (SDL_Color){ 20, 30, 60, alpha(90) };
+}
+static SDL_Color edgeColour(void) { return (SDL_Color){ 255, 255, 255, alpha(150) }; }
 
 void touch_render(SDL_Renderer* r, int w, int h) {
   scrW = w;
@@ -299,7 +305,8 @@ void touch_render(SDL_Renderer* r, int w, int h) {
   int ts = (int)(u / 150.0f);
   if(ts < 1) ts = 1;
   uint16_t held = heldMask();
-  UiColor txt = { 255, 255, 255, 210 };
+  UiColor txt = { 255, 255, 255, alpha(210) };
+  SDL_Color edgeCol = edgeColour();
 
   if(!menuOpen) {
   // D-pad: a disc with the four arrows, lit where it is pressed
